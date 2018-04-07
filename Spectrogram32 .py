@@ -8,7 +8,8 @@ import ImportExcel as iex
 from scipy import signal as sg
 import math
 import os
-patient_number = 218
+import pathlib
+patient_number = 214
 filepath = r"C:\Users\Arno\Documents\Patients\\" + str(patient_number) + "\eeg.txt"
 EEGdatacsv = pd.read_csv(filepath,sep=';',decimal='.')
 
@@ -27,7 +28,10 @@ fields = EEGdatacsv.columns.values.tolist()
 window = 2048 #Nombre de points de la fenêtre
 for i in range (4, 36):
     Stemp, Ftemp, Ttemp, Imgtemp = plt.specgram(sg.filtfilt(b,a,EEGdatacsv[fields[i]]),NFFT=window,Fs=sample_rate,noverlap=window/2);#,vmin=-70,vmax=20);
-    #Reduction de la taille des données : suppression des points > 50Hz
+    # Reduction de la taille des données : récupérer uniquements les points < 50Hz
+    # Le tableau est de la taille 1025 lignes x n colonnes (varie selon le temps et la taille des fenêtres)
+    # 125Hz (SamplingRate/2) --> 1025 lignes, donc 50Hz --> 410 lignes.
+    Imgtemp = Imgtemp._A[615:1025]  #Le tableau est inversé donc on prend les 410 dernières lignes.
     
     S.append(Stemp)
     F.append(Ftemp)
@@ -42,14 +46,13 @@ plt.close()
 def axis_parameters(F,T):
     Tlabel = 'Time (secs)'
     Tmax = T.max()
-    Fmax = F.argmax()
     if T.max() > 60*60*3:
        Tmax = T.max()/(60*60)
        Tlabel = 'Time (hours)'
     elif T.max() > 60*3:
        Tmax = T.max()/60
        Tlabel = 'Time (mins)'
-    return [Fmax, Tmax, Tlabel ] 
+    return [Tmax, Tlabel ] 
 
 electrode_sets = ['1-8', '9-16', '17-23', '24-32']
 plt.close('all')
@@ -64,9 +67,13 @@ def plot8spec(index):
         sb = subplot(2,4,j)
         ax.append(sb)
         current_field = j-1 + (index)*8;
-        [Fmax, Tmax, Tlabel] = axis_parameters(F[j],T[j])
-        plt.imshow(Img[current_field]._A,vmin=-70,vmax=-20, aspect='auto', interpolation='none', cmap='viridis', extent = (0,Tmax,0,Fmax/5)) #Je suis partiellement sûr de moi pour l'extent
-        #plt.imsave(arr = Img[current_field]._A,vmin=-70,vmax=-20, aspect='auto', interpolation='none', cmap='viridis', extent = (0,Tmax,0,Fmax/5))
+        [Tmax, Tlabel] = axis_parameters(F[j],T[j])
+        plt.imshow(Img[current_field],vmin=-70,vmax=-20, aspect='auto', interpolation='none', cmap='viridis', extent = (0,Tmax,0,50))
+        spect_dir_path = r"C:\Users\Arno\Documents\Patients\\" + str(patient_number) + "\Spectrograms\\"
+        spect_img_path = spect_dir_path + str(current_field) + ' - ' + str(fields[(current_field)+4]) + '.png'
+        pathlib.Path(spect_dir_path).mkdir(parents=True, exist_ok=True) 
+        #Avant de créer l'image, on vérifie si elle existe déja
+        if not os.path.exists(spect_img_path): plt.imsave(fname = spect_img_path, arr = Img[current_field],vmin=-70,vmax=-20, cmap='viridis')
         #plt.cm('plasma')
         
         ## Axes verticaux pour marquer les temps
