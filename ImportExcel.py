@@ -24,15 +24,18 @@ def getPropofolTime(patient_number, timestyle = 'index'):
 
 def getSutureEndTime(patient_number, timestyle = 'index'):
     patientExcel = getPatientExcel(patient_number)
-    dt = patientExcel[0][16][2]
+    try : dt = patientExcel[0][16][2]
+    except : return 0
     return getTime(dt, timestyle)
     
 def getSedationStopTime(patient_number, timestyle = 'index'):
     patientExcel = getPatientExcel(patient_number)
-    dt = patientExcel[0][17][2]
+    try : dt = patientExcel[0][17][2]
+    except : return 0
     return getTime(dt, timestyle)
     
 def getWakeUpTime(patient_number, timestyle = 'index'):
     patientExcel = getPatientExcel(patient_number)
-    dt = patientExcel[0][19][2]
+    try : dt = patientExcel[0][19][2]
+    except : return 0
     return getTime(dt, timestyle)
