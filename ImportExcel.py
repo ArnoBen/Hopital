@@ -39,3 +39,31 @@ def getWakeUpTime(patient_number, timestyle = 'index'):
     try : dt = patientExcel[0][19][2]
     except : return 0
     return getTime(dt, timestyle)
+
+def getPatientSummary(patient_number):
+    import pyexcel_ods as pe
+    filepath = r"C:\Users\Arno\Documents\Patients\Fiches excel patients\Patients utilisables.ods"    
+    patientSummaryExcel = pe.get_data(filepath)
+    patientSummaryExcel = list(patientSummaryExcel.values())
+    return patientSummaryExcel
+    
+def getMaxRowLimit(patient_number): #Renvoie nombre de lignes avant que le signal soit médiocre.
+    patientSummaryExcel = getPatientSummary(patient_number)
+    MaxRowLimit = patientSummaryExcel[0][patient_number - 200][8]
+    return MaxRowLimit
+    
+def getBadChannels(patient_number):
+    patientSummaryExcel = getPatientSummary(patient_number)
+    BadChannels = str(patientSummaryExcel[0][patient_number - 200][5])
+    BadChannels = BadChannels.split(';')
+    for i in range(len(BadChannels)) :
+        BadChannels[i] = int(BadChannels[i]);
+    return BadChannels
+
+def getBadICAs(patient_number):
+    patientSummaryExcel = getPatientSummary(patient_number)
+    BadICAs = str(patientSummaryExcel[0][patient_number - 200][9])
+    BadICAs = BadICAs.split(';')
+    for i in range(len(BadICAs)) :
+        BadICAs[i] = int(BadICAs[i]);
+    return BadICAs

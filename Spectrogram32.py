@@ -9,7 +9,7 @@ from scipy import signal as sg
 import math
 import os
 import pathlib
-patient_number = 229
+patient_number = 210
 
 filepath = r"C:\Users\Arno\Documents\Patients\\" + str(patient_number) + "\eeg.txt"
 sig = pd.read_csv(filepath,sep=';',decimal='.')
