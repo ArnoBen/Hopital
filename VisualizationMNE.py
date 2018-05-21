@@ -7,6 +7,7 @@ import numpy as np
 import ImportExcel as iex
 from scipy import signal as sg
 import mne
+import MNEfunctions as mnef
 
 patient_number = 229
 sample_rate = 250
@@ -17,10 +18,11 @@ fields = sig.columns.values.tolist()
 #Filter definition
 fn=sample_rate/2 #fn: Nyquist frequency = sample_rate/2
 b,a=sg.butter(5,(1/fn, 48/fn),'bandpass')
-#%% Times extracted from excel
+#%% 
+#Times extracted from excel
 LOC = iex.getPropofolTime(patient_number)
 ROC = iex.getWakeUpTime(patient_number)
-#%%
+
 eeg = np.array(np.ones([31, sig.shape[0]]))
 for i in range(4,35):
     eeg[i-4] = sg.filtfilt(b,a,sig[fields[i]])
@@ -62,10 +64,16 @@ bad_channels = [ls_channel[ch] for ch in iex.getBadChannels(patient_number)]
 info = mne.create_info(ch_names=ls_channel, sfreq=sample_rate, ch_types='eeg')
 info['bads'] = bad_channels
 mtg = mne.channels.read_montage("standard_1020",ch_names=ls_channel, unit='cm')
-#epochs = mne.EpochsArray(eeg_epochs[int(ROC/pts_per_epoch): int(ROC/pts_per_epoch) + 160,:,:], info)#, events, tmin=0, event_id)
 epochs = mne.EpochsArray(eeg_epochs, info, events, event_id= event_id, tmin=0, reject = dict(eeg=0.3))
 epochs.set_montage(mtg, set_dig=False)
-epochs.plot(scalings=dict(eeg=1.5e-1), n_epochs=5)
+#epochs.plot(scalings=dict(eeg=1.5e-1), n_epochs=5)
+
+LOC, ROC = mnef.getLOCROC(epochs, 'time',epoch_duration*sample_rate)
+#%%
+#Let's create three separate objects : awake before AG, asleep, awake after AG
+#epochs_awake1 = epochs.copy(); epochs_awake1.crop(tmin = 0, tmax = LOC)
+#epochs_asleep = epochs.copy(); epochs_asleep.crop(tmin = LOC, tmax = ROC)
+#epochs_awake2 = epochs.copy(); epochs_awake2.crop(tmin = ROC)
 #%%
 #raw = mne.io.RawArray(eeg, info)
 #raw.set_montage(mtg, set_dig=False)
@@ -89,47 +97,57 @@ ica = mne.preprocessing.ICA(n_components=n_components, method=method, random_sta
 #print(ica)
 #reject = dict(eeg=5e-2)
 ica.fit(epochs)
-ica.plot_components(inst=epochs)
-ica.plot_sources(inst=epochs)
+#ica.plot_components(inst=epochs)
+#ica.plot_sources(inst=epochs)
 #%% Apply correction
 #We have to visually inspect the eog component
 eog_component = iex.getBadICAs(patient_number)
 ica.exclude = eog_component
 epochs_corrected = epochs.copy()
 ica.apply(epochs_corrected)
-epochs_corrected.plot(scalings=dict(eeg=1.5e-1), n_epochs=5)
+#epochs_corrected.plot(scalings=dict(eeg=1.5e-1), n_epochs=5)
 #%% Removing epochs with points > 3*std
 
 #We need to know at which epochs the patient loses consciousness and wakes up:
-passed_LOC = False
-for i in range(epochs_corrected.events.shape[0]):
-    if epochs_corrected.events[i][2] == 2 and passed_LOC == False: 
-        LOC_epoch = i; passed_LOC = True;
-    if epochs_corrected.events[i][2] == 1 and passed_LOC == True:
-        ROC_epoch = i; break;
-
+[LOC_epoch, ROC_epoch] = mnef.getLOCROC(epochs_corrected)
 std_channels = [] # (std_values, 3) ,
 for i in range(31): 
     std_channels.append([  np.std(epochs_corrected.get_data()[:LOC_epoch,i,:]),          # std pre LOC
                            np.std(epochs_corrected.get_data()[LOC_epoch:ROC_epoch,i,:]), # std asleep
                            np.std(epochs_corrected.get_data()[ROC_epoch:,i,:])           # std post ROC
                         ])                     
-epoch_count = 1
+#%%
+epoch_count = 0
 bad_epochs_count = 0
 state = 0
 bad_epochs = []
+bad_epoch_fft = []
 for epoch in epochs_corrected:
     if epoch_count < LOC_epoch : state = 0
     elif epoch_count > LOC_epoch and epoch_count < ROC_epoch : state = 1
     elif epoch_count > ROC_epoch : state = 2
     for i in range(31):
-        if np.max(epoch[i,:]) - np.min(epoch[i,:]) > 7*std_channels[i][state]:# or abs(np.min(epoch[i,:])) > 5*std_channels[i]:
+        #If the channel is marked as bad, we ignore it:
+        is_bad_ch = False
+        for ch in epochs_corrected.info['bads'] :
+            if ls_channel[i] == ch : is_bad_ch = True
+        if is_bad_ch : continue;
+        #Comparison to standard deviation :
+        if np.max(epoch[i,:]) - np.min(epoch[i,:]) > 8*std_channels[i][state]:
             #print(epoch_count, ';', i);
             bad_epochs_count = bad_epochs_count + 1
             bad_epochs.append(epoch_count)
             break
+        #Detection of abnormal FFT:
+        epoch_fft = np.abs(np.fft.fft(epoch[i,:250]))
+        epoch_fft = epoch_fft[:np.int(len(epoch_fft)/2)]
+        if np.max(epoch_fft[20:]) > 1 or np.max(epoch_fft[:5]) > 1.5 or np.max(epoch_fft) > 2:
+            bad_epochs_count = bad_epochs_count + 1
+            bad_epochs.append(epoch_count)
+            bad_epoch_fft.append([epoch_count,i])
+            break
     epoch_count = epoch_count+1
     #if count == 10:break;
 print(bad_epochs_count)       
-            
-        
+#epochs_corrected.drop(bad_epochs)
+#epochs_corrected.plot(scalings=dict(eeg=1.5e-1), n_epochs=5)
