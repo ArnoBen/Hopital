@@ -1,6 +1,8 @@
 import nilearn
 import sklearn
+import sklearn.metrics as metrics
 import scipy
+import pylab
 import random
 from scipy.signal import welch
 import mne
@@ -28,7 +30,7 @@ X_all_patients_asleep, y_all_patients_asleep = [], [] #Tous les patients concat�
 
 patient_feat_lenghts = []
 
-empty_array = np.array([[],[],[],[]]).T
+empty_array = np.array([[],[],[],[],[],[]]).T
 
 for ch in range(31) : 
     X_all_patients.append([])
@@ -66,37 +68,48 @@ for patient_number in patients:
     
     #Power Spectrum Density
     psd_delta_epochs = []
+    psd_theta_epochs = []
     psd_alpha_epochs = [] # (31 channels * n_epochs)
     psd_beta_epochs = []
-    for ch in range(31) : psd_delta_epochs.append([]), psd_alpha_epochs.append([]), psd_beta_epochs.append([])
+    psd_epochs = []
+    for ch in range(31) : psd_delta_epochs.append([]), psd_theta_epochs.append([]), psd_alpha_epochs.append([]), psd_beta_epochs.append([]), psd_epochs.append([])
     for ch in range(31) : 
         if ch in bad_channels : continue
         for epoch in range(dataset_size):
             f,Pxx = welch(patient_np[epoch,ch,:], nperseg=250, nfft=sample_rate)
             mean_delta_psd = np.average(Pxx[0:4])
+            mean_theta_psd = np.average(Pxx[4:8])
             mean_alpha_psd = np.average(Pxx[8:12])
             mean_beta_psd = np.average(Pxx[18:30])
+            mean_psd = np.average(Pxx)
+            
             psd_delta_epochs[ch].append(np.abs(mean_delta_psd))
+            psd_theta_epochs[ch].append(np.abs(mean_theta_psd))
             psd_alpha_epochs[ch].append(np.abs(mean_alpha_psd))
             psd_beta_epochs[ch].append(np.abs(mean_beta_psd))
-    
+            psd_epochs[ch].append(np.abs(mean_psd))
     
     
     #Repartition awake/asleep
     awake_std = []
     awake_psd_delta = []
+    awake_psd_theta = []
     awake_psd_alpha = []
     awake_psd_beta = []
+    awake_psd = []
     
     asleep_std = []
     asleep_psd_delta = []
+    asleep_psd_theta = []
     asleep_psd_alpha = []
     asleep_psd_beta = []
+    asleep_psd = []
     
     for ch in range(31) : 
         (awake_std.append([]), awake_psd_alpha.append([]) , awake_psd_beta.append([]),
         asleep_std.append([]),asleep_psd_alpha.append([]), asleep_psd_beta.append([]),
-        awake_psd_delta.append([]), asleep_psd_delta.append([]))
+        awake_psd_delta.append([]), asleep_psd_delta.append([]), awake_psd_theta.append([]),
+        asleep_psd_theta.append([]), awake_psd.append([]), asleep_psd.append([]))
         
     events = patient_mne.events
     for ch in range(31):
@@ -106,26 +119,31 @@ for patient_number in patients:
                 asleep_std[ch].append(std_epochs[ch][epoch])
                 
                 asleep_psd_delta[ch].append(psd_delta_epochs[ch][epoch])
+                asleep_psd_theta[ch].append(psd_theta_epochs[ch][epoch])
                 asleep_psd_alpha[ch].append(psd_alpha_epochs[ch][epoch])
                 asleep_psd_beta[ch].append(psd_beta_epochs[ch][epoch])
+                asleep_psd[ch].append(psd_epochs[ch][epoch])
             else:
                 awake_std[ch].append(std_epochs[ch][epoch])
 
                 awake_psd_delta[ch].append(psd_delta_epochs[ch][epoch])
+                awake_psd_theta[ch].append(psd_theta_epochs[ch][epoch])
                 awake_psd_alpha[ch].append(psd_alpha_epochs[ch][epoch])
                 awake_psd_beta[ch].append(psd_beta_epochs[ch][epoch])
+                awake_psd[ch].append(psd_epochs[ch][epoch])
     # repartition training testing
     scores = []
     for ch in range (31):
         #if ch in bad_channels : X = np.zeros([patient_np.shape[0],3]); y = np.zeros([patient_np.shape[0],3]) 
         #On veut un tableau de données (n_samples x n_features), ici n points et 3 features
-        std, psd_delta, psd_alpha, psd_beta = [],[],[],[]
+        std, psd_delta, psd_theta, psd_alpha, psd_beta, psd_mean = [],[],[],[],[],[]
         std = asleep_std[ch].copy() ;              std.extend(awake_std[ch])
         psd_delta = asleep_psd_delta[ch].copy() ;  psd_delta.extend(awake_psd_delta[ch])
+        psd_theta = asleep_psd_theta[ch].copy() ;  psd_theta.extend(awake_psd_theta[ch])
         psd_alpha = asleep_psd_alpha[ch].copy() ;  psd_alpha.extend(awake_psd_alpha[ch])
-        psd_beta = asleep_psd_beta[ch].copy() ;    psd_beta.extend(awake_psd_beta[ch])
-        
-        X = np.array([np.array(std), np.array(psd_delta), np.array(psd_alpha), np.array(psd_beta)])
+        psd_beta = asleep_psd_beta[ch].copy()   ;  psd_beta.extend(awake_psd_beta[ch])
+        psd_mean = asleep_psd[ch].copy()        ;  psd_mean.extend(awake_psd[ch])
+        X = np.array([np.array(std), np.array(psd_delta), np.array(psd_theta), np.array(psd_alpha), np.array(psd_beta), np.array(psd_mean)])
         X = X.T
         y = np.array([])
         for i in range(len(asleep_std[ch])) : y = np.append(y, 2)
@@ -155,24 +173,21 @@ for ch in range(31) :
     scores.append(score)
 plt.scatter(range(1,32),scores)
 #%% Cross-validation
-#from sklearn.model_selection import KFold, cross_val_score
-#X = ["a", "a", "b", "c", "c", "c"]
-#k_fold = KFold(n_splits=3)
 #for train_indices, test_indices in k_fold.split(X_all_patients[0]):
 #    print('Train: %s | test: %s' % (train_indices, test_indices))
-auc_valid, auc_test = np.zeros([10, 8, 31]), np.zeros([10, 8, 31]) # (nb k testés * patients * channels)
+auc_valid, auc_test = np.zeros([14, 10, 31]), np.zeros([14, 10, 31]) # (nb k testés * patients * channels)
 #X_train = X_patient[:6]
 
 # Méthode : 
 # Créer 2 matrices 3D de scores : la première sur Xvalid, la 2e sur Xtest.
 # Une fois que les auc sont enregistrés, on regarde le meilleur k sur les auc de Xvalid,
 # et on regarde à quel score il correspond sur Xtest, ce qui sera le score réel.
-for k in range(5,15):
+for k in range(1,15):
     
     knn_cv = KNeighborsClassifier(k)
-    for n in range(8):
+    for n in range(10):
         
-        sample = random.sample(range(8),8)
+        sample = random.sample(range(8),8)  #Sample de patients
         #Séparation des patients en train, valid et test:
         X_train_patient, y_train_patient, X_valid_patient, y_valid_patient, X_test_patient, y_test_patient = [],[],[],[],[],[]
         for ch in range(31) : #Initialisation
@@ -190,7 +205,7 @@ for k in range(5,15):
         
         for ch in range(31):
             
-            ind = np.random.choice(8,8)
+            ind = np.random.choice(10,10)
             X_train , y_train = X_train_patient[ch] , y_train_patient[ch]
             X_valid , y_valid = X_valid_patient[ch] , y_valid_patient[ch]
             X_test  , y_test  = X_test_patient[ch]  , y_test_patient[ch]
@@ -198,18 +213,19 @@ for k in range(5,15):
             if X_train.shape[0] * X_valid.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
             
             knn_cv.fit(X_train, y_train)
+            prediction_prob_valid = knn_cv.predict_proba(X_valid)
+            prediction_prob_test = knn_cv.predict_proba(X_test)
             
-            auc_valid_ch[ch] = knn_cv.predict(X_valid)
-            
-            y_proba_valid = knn_cv.predict_proba(X_valid)
-            #auc_valid = sklearn.metrics.auc(X_valid,y_proba_valid)
-            #auc_valid_ch.append(auc_valid)
-            
-            y_proba_test = knn_cv.predict_proba(X_test)
-            #auc_test = sklearn.metrics.auc(X_test,y_proba_test)
-            #auc_test_ch.append(auc_test)
-            print(ch, knn_cv.score(X_test, y_test))
-            
+            for i in range(len(y_valid_patient[ch])) : # Y a une couille parce qu'il veut que des évènements binaires donc asleep passe de 2 à 0 ; awake 1
+                if y_valid_patient[ch][i] == 2 : y_valid_patient[ch][i] = 0
+            for i in range(len(y_test_patient[ch])) : # Y a une couille parce qu'il veut que des évènements binaires donc asleep passe de 2 à 0 ; awake 1
+                if y_test_patient[ch][i] == 2 : y_test_patient[ch][i] = 0
+            auc_valid[k-1,n,ch] = metrics.roc_auc_score(y_valid_patient[ch], prediction_prob_valid[:,1])
+            auc_test[k-1,n,ch] = metrics.roc_auc_score(y_test_patient[ch], prediction_prob_test[:,1])
+    print(k)
+auc_valid_mean = np.mean(auc_valid, axis=1)
+auc_test_mean = np.mean(auc_test, axis=1)    
+pylab.unravel_index(auc_valid_mean.argmax(), auc_valid_mean.shape)
 #        auc_valid_n.append(auc_)
 #    auc_cv_k[k] = np.mean(auc_cv_n)
 #%%
