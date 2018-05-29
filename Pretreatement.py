@@ -8,17 +8,20 @@ import ImportExcel as iex
 from scipy import signal as sg
 import mne
 import MNEfunctions as mnef
+from scipy.signal import welch
+from scipy.fftpack import fft
 
-patient_number = 217
+patient_number = 205
 sample_rate = 250
 epoch_duration = 2 #in seconds
+NFFT = sample_rate * epoch_duration
 filepath = r"C:\Users\Arno\Documents\Patients\\" + str(patient_number) + "\eeg.txt"
 sig = pd.read_csv(filepath,sep=';',decimal='.', nrows=iex.getMaxRowLimit(patient_number))
 fields = sig.columns.values.tolist()
 
 #Filter definition
 fn=sample_rate/2 #fn: Nyquist frequency = sample_rate/2
-b,a=sg.butter(5,(1/fn, 40/fn),'bandpass')
+b,a=sg.butter(5,(1/fn, 30/fn),'bandpass')
 #%% 
 #Times extracted from excel
 LOC = iex.getPropofolTime(patient_number)
@@ -94,11 +97,11 @@ ica = mne.preprocessing.ICA(n_components=n_components, method=method, random_sta
 #print(ica)
 #reject = dict(eeg=5e-2)
 ica.fit(epochs)
-#ica.plot_components(inst=epochs)
+ica.plot_components(inst=epochs)
 #ica.plot_sources(inst=epochs)
 #%% Apply correction
 #We have to visually inspect the eog component
-eog_component = [3,4]#iex.getBadICAs(patient_number)
+eog_component = iex.getBadICAs(patient_number)
 ica.exclude = eog_component
 epochs_corrected = epochs.copy()
 ica.apply(epochs_corrected)
@@ -141,22 +144,32 @@ for epoch in epochs_corrected:
         #Detection of abnormal FFT:
         epoch_fft = np.abs(np.fft.fft(epoch[i,:250]))
         epoch_fft = epoch_fft[:np.int(len(epoch_fft)/2)]
-#        if np.max(epoch_fft[25:]) > 0.5 or np.max(epoch_fft[:5]) > 1.5 or np.max(epoch_fft) > 2:
-#            bad_epochs_count += 1
-#            bad_epochs.append(epoch_count)
-#            bad_epoch_fft.append([epoch_count,i])
-#            break
+        if np.max(epoch_fft[25:]) > 1.5 or np.max(epoch_fft[:5]) > 6 or np.max(epoch_fft) > 4:
+            bad_epochs_count += 1
+            bad_epochs.append(epoch_count)
+            bad_epoch_fft.append([epoch_count,i])
+            break
+#       Detection of abnormal psd:
+#        f, epoch_psd = welch(epoch[i,:], nfft=epoch_duration*sample_rate)
+#        std_epoch_psd = np.std(epoch_psd)
+#        if np.max(epoch_psd) > 
     epoch_count += 1
     #if count == 10:break;
 print(bad_epochs_count)       
 #epochs_corrected.drop(bad_epochs)
 #epochs_corrected.plot(scalings=dict(eeg=1.5e-1), n_epochs=5, n_channels = 31)
-#epochs_corrected.save(r'C:\Users\Arno\Documents\Patients\Epochs\patient' + str(patient_number) + '-epo.fif')
+#epochs_corrected.save(r'C:\Users\Arno\Documents\Patients\Epochs\patient' + str(patient_number) + '-epo-30Hz.fif')
 #%%
-faulty_epoch = epochs_corrected.get_data()[47,4,:]
-#plt.figure()
-#plt.subplot(2,1,1)
-#plt.plot(faulty_epoch)
-faulty_epoch_fft = np.fft.fft(faulty_epoch)
-#plt.subplot(2,1,2)
-plt.plot(faulty_epoch_fft[:30])
+faulty_epoch = epochs_corrected.get_data()[404,9,:]
+plt.figure()
+
+plt.subplot(3,1,1)
+plt.plot(faulty_epoch)
+
+faulty_epoch_fft = fft(faulty_epoch)
+plt.subplot(3,1,2)
+plt.plot(np.abs(faulty_epoch_fft[:30]))
+
+f, faulty_epoch_psd = Pxx = welch(faulty_epoch, nfft=epoch_duration * sample_rate)
+plt.subplot(3,1,3)
+plt.plot(faulty_epoch_psd[:30])

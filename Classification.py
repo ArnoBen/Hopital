@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplot
 from mpl_toolkits.mplot3d import Axes3D
 
-patient_number = 217
+patient_number = 216
 sample_rate = 250
 epoch_duration = 2 #in seconds
 NFFT = sample_rate * epoch_duration
@@ -106,13 +106,16 @@ for ch in range(31):
             awake_fft_beta[ch].append(fft_beta_epochs[ch][epoch])
             awake_psd_alpha[ch].append(psd_alpha_epochs[ch][epoch])
             awake_psd_beta[ch].append(psd_beta_epochs[ch][epoch])
-plt.close('all')
-for ch in range(31):
-    plt.figure()   
-    plt.scatter(asleep_std[ch], asleep_psd_beta[ch], marker = '.', s = 2)
-    plt.scatter(awake_std[ch], awake_psd_beta[ch], marker = '.', s= 2)
 
-#%%
+#%% 2D plots
+plt.close('all')
+for ch in range(3):
+    plt.figure()   
+    plt.scatter(asleep_std[ch], asleep_psd_beta[ch], marker = '.', s = 4, color = 'b', alpha = 0.4, label = 'asleep')
+    plt.scatter(awake_std[ch], awake_psd_beta[ch], marker = '.', s= 4, color = 'orange', alpha = 0.4, label = 'awake')
+    plt.legend()
+
+#%% 3D plots
 
 for ch in range(31):
     fig = plt.figure()
@@ -126,14 +129,39 @@ for ch in range(31):
     xs = asleep_std[ch]
     ys = asleep_psd_alpha[ch]
     zs = asleep_psd_beta[ch]
-    ax.scatter(xs, ys, zs, c='o', marker='.', alpha = 0.5)
+    ax.scatter(xs, ys, zs, c='b', marker='.', label = 'asleep')
     xs = awake_std[ch]
     ys = awake_psd_alpha[ch]
     zs = awake_psd_beta[ch]
-    ax.scatter(xs, ys, zs, c='cyan', marker = '.', aplha = 0.5)
-        
+    ax.scatter(xs, ys, zs, c='orange', marker = '.', label = 'awake')
+    ax.legend()    
     ax.set_xlabel('std')
     ax.set_ylabel('alpha power')
     ax.set_zlabel('beta power')
     
     plt.show()
+
+#%% KNN
+from sklearn.neighbors import KNeighborsClassifier
+scores = []
+for ch in range (31):
+    if ch in bad_channels : continue
+    #On veut un tableau de données (n_samples x n_features), ici n points et 3 features
+    std, psd_alpha, psd_beta = [],[],[]
+    std = asleep_std[ch].copy() ;              std.extend(awake_std[ch])
+    psd_alpha = asleep_psd_alpha[ch].copy() ;  psd_alpha.extend(awake_psd_alpha[ch])
+    psd_beta = asleep_psd_beta[ch].copy() ;    psd_beta.extend(awake_psd_beta[ch])
+    
+    X = np.array([np.array(std), np.array(psd_alpha), np.array(psd_beta)])
+    X = X.transpose()
+    y = np.array([])
+    for i in range(len(asleep_std[ch])) : y = np.append(y, 2)
+    for i in range(len(awake_std[ch])) : y = np.append(y, 1)
+    
+    X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X,y)
+    
+    Knn = KNeighborsClassifier(n_neighbors=5)
+    Knn.fit(X_train,y_train)
+    score = Knn.score(X_test, y_test)
+    scores.append(score)
+print(scores)
