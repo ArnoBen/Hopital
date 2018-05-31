@@ -10,7 +10,8 @@ from matplotlib.pyplot import plot
 from matplotlib.pyplot import subplot
 from matplotlib.pyplot import figure
 from mpl_toolkits.mplot3d import Axes3D
-from sklearn.metrics import roc_curve, auc, roc_auc_score
+import sklearn
+from sklearn.metrics import roc_curve, auc, roc_auc_score, accuracy_score, precision_score
 from sklearn.neighbors import KNeighborsClassifier
 
 sample_rate = 250
@@ -201,10 +202,10 @@ auc_valid, auc_test = np.zeros([14, 10, 31]), np.zeros([14, 10, 31]) # (nb k tes
 # Créer 2 matrices 3D de scores : la première sur Xvalid, la 2e sur Xtest.
 # Une fois que les auc sont enregistrés, on regarde le meilleur k sur les auc de Xvalid,
 # et on regarde à quel score il correspond sur Xtest, ce qui sera le score réel.
-for k in range(1,15): #On essaye différentes valeurs de k voisins
+for k in range(1,100): #On essaye différentes valeurs de k voisins
     
     knn_cv = KNeighborsClassifier(k)
-    for n in range(10): #On fait 10 essais puis on moyenne les résultats des essais
+    for n in range(50): #On fait 10 essais puis on moyenne les résultats des essais
         
         sample = random.sample(range(8),8)  #Sample de patients
         #Séparation des patients en train, valid et test:
@@ -272,81 +273,20 @@ best_auc_test_mean = np.mean(best_auc_test)
 #        auc_valid_n.append(auc_)
 #    auc_cv_k[k] = np.mean(auc_cv_n)
 
-#%% ROC curve with best k and best channel
-figure()
-tprs = [] #true positive rates
-aucs = [] #areas under curves
-mean_fpr = np.linspace(0, 1, 100)
 
-k = 1
-ch = 30
-knn = KNeighborsClassifier(k)
-
-for n in range(30): #On fait 10 essais puis on moyenne les résultats des essais
-    sample = random.sample(range(8),8)  #Sample de patients
-    #Séparation des patients en train et test:
-    X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
-    y_train_patient, y_test_patient = [],[]
-   
-    for i in range(6) : #On ajoute à la suite les features de chaque channel de chaque patient de la train list
-        X_train_patient = np.vstack((X_train_patient, X_patient[sample[i]][ch]))
-        y_train_patient = np.concatenate((y_train_patient, y_patient[sample[i]][ch]))
-    for i in range(2) :
-        X_test_patient = X_patient[sample[i+6]][ch]
-        y_test_patient = y_patient[sample[i+6]][ch]
-
-    ind = np.random.choice(10,10)
-    X_train , y_train = X_train_patient, y_train_patient
-    X_test  , y_test  = X_test_patient , y_test_patient
-    
-    if X_train.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
-    
-    #Entrainement pour une répartition aléatoire train/test sur les n :
-    knn.fit(X_train, y_train)
-    predict_prob_test = knn.predict_proba(X_test)
-    fpr, tpr, thresholds = roc_curve(y_test, predict_prob_test[:, 1], pos_label = 2) #On considère positif qd patient endormi
-    tprs.append(interp(mean_fpr, fpr, tpr))
-    tprs[-1][0] = 0.0
-    roc_auc = auc(fpr, tpr)
-    aucs.append(roc_auc)
-    plt.plot(fpr, tpr, lw=1, alpha=0.3, label='ROC fold %d (AUC = %0.2f)' % (n, roc_auc))
-    print(n)
-#Plot remaining stuff
-plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r', label='Luck', alpha=.8)
-
-mean_tpr = np.mean(tprs, axis=0)
-mean_tpr[-1] = 1.0
-mean_auc = auc(mean_fpr, mean_tpr)
-std_auc = np.std(aucs)
-plt.plot(mean_fpr, mean_tpr, color='b',
-         label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
-         lw=2, alpha=.8)
-
-std_tpr = np.std(tprs, axis=0)
-tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-#plot std in grey :
-plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                 label=r'$\pm$ 1 std. dev.')
-
-plt.xlim([-0.05, 1.05])
-plt.ylim([-0.05, 1.05])
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('Receiver operating characteristic example')
-plt.legend(loc="lower right")
-plt.show()
 #%% ROC curve with varying k and best channel
 figure()
 mean_fpr = np.linspace(0, 1, 100)
 
 ch = 30
 aucs_k = []
-for k in range(1,15):
+stds_k = []
+for k in range(1,20):
     knn = KNeighborsClassifier(k)
+    dtc = sklearn.tree.DecisionTreeClassifier(max_depth=k)
     tprs = [] #true positive rates
     aucs = [] #areas under curves
-    for n in range(20): #On fait 10 essais puis on moyenne les résultats des essais
+    for n in range(50): #On fait 10 essais puis on moyenne les résultats des essais
         sample = random.sample(range(8),8)  #Sample de patients
         #Séparation des patients en train et test:
         X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
@@ -379,10 +319,12 @@ for k in range(1,15):
     mean_auc = auc(mean_fpr, mean_tpr)
     std_auc = np.std(aucs)
     #Plot mean auc
+    #if k%5 == 0:
     plt.plot(mean_fpr, mean_tpr,
-             label=f'k={k} (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+             label=f'k={k} (AUC = %0.3f $\pm$ %0.3f)' % (mean_auc, std_auc),
              lw=2, alpha=.8)
     aucs_k.append(mean_auc)
+    stds_k.append(std_auc)
     print(k)
 #Plot remaining stuff
 #std_tpr = np.std(tprs, axis=0)
@@ -395,14 +337,26 @@ plt.xlim([-0.05, 1.05])
 plt.ylim([-0.05, 1.05])
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
-plt.title('Receiver operating characteristic example')
+plt.title('Mean Receiver Operating Characteristic for each amount of neighbors')
+plt.suptitle('Nearest Neighbors', fontsize = 16)
+#plt.suptitle('Decision Tree Classifier')
 plt.legend(loc="lower right")
-plt.grid()
+#plt.grid()
 plt.show()
 
 figure()
-plot(aucs_k)
-#%%
+#plt.bar(np.arange(1,k+1,1),aucs_k,0.1)
+plt.errorbar(np.arange(1,k+1,1), aucs_k, (np.array(stds_k)/2).tolist(), linestyle = 'None', marker = 'o', capsize = 3, ecolor='r')
+plt.xticks(np.arange(1,k+1,1))
+plt.ylim([0.70,0.9])
+plt.grid(axis = 'x')
+plt.xlabel('Max depth')
+plt.ylabel('Mean AUC for 50 tries')
+plt.title('Determination of best amount of neighbors')
+plt.suptitle('Nearest Neighbors', fontsize = 16)
+plt.ylim([0.6,0.95])
+
+#%% Multiple model comparison
 from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.neural_network import MLPClassifier
@@ -415,28 +369,199 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
-#classifiers = [
-#    KNeighborsClassifier(3),
-#    SVC(kernel="linear", C=0.025),
-#    SVC(gamma=2, C=1),
-#    GaussianProcessClassifier(1.0 * RBF(1.0)),
-#    DecisionTreeClassifier(max_depth=5),
-#    RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
-#    MLPClassifier(alpha=1),
-#    AdaBoostClassifier(),
-#    GaussianNB(),
-#    QuadraticDiscriminantAnalysis()]
+names = ["Nearest Neighbors", "Decision Tree", "AdaBoost",
+         "Naive Bayes", "QDA"]
+
+classifiers = [
+    KNeighborsClassifier(6),
+    DecisionTreeClassifier(max_depth=3),
+    AdaBoostClassifier(),
+    GaussianNB(),
+    QuadraticDiscriminantAnalysis()]
 scores = []
-#for classifier in classifiers:
-#    classifier.fit(X_train, y_train)
-#    score = classifier.score(X_test, y_test)
-#    scores.append(score)
-for k in range(2,20):
-    Knn = KNeighborsClassifier(n_neighbors=k)
-    Knn.fit(X_train,y_train)
-    score = Knn5.score(X_test, y_test)
-    scores.append(score)
-print(scores)
+
+tprs = [] #true positive rates
+aucs = [] #areas under curves
+model_aucs = []
+model_stds = []
+
+mean_fpr = np.linspace(0, 1, 100)
+
+ch = 30
+QDA = QuadraticDiscriminantAnalysis()
+
+for name, clf in zip(names, classifiers):
+    figure()
+    print(name)
+    for n in range(50): #On fait 10 essais puis on moyenne les résultats des essais
+        sample = random.sample(range(8),8)  #Sample de patients
+        #Séparation des patients en train et test:
+        X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
+        y_train_patient, y_test_patient = [],[]
+       
+        for i in range(6) : #On ajoute à la suite les features de chaque channel de chaque patient de la train list
+            X_train_patient = np.vstack((X_train_patient, X_patient[sample[i]][ch]))
+            y_train_patient = np.concatenate((y_train_patient, y_patient[sample[i]][ch]))
+        for i in range(2) :
+            X_test_patient = X_patient[sample[i+6]][ch]
+            y_test_patient = y_patient[sample[i+6]][ch]
+    
+        ind = np.random.choice(10,10)
+        X_train , y_train = X_train_patient, y_train_patient
+        X_test  , y_test  = X_test_patient , y_test_patient
+        
+        if X_train.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
+        
+        #Entrainement pour une répartition aléatoire train/test sur les n :
+        clf.fit(X_train, y_train)
+        predict_prob_test = clf.predict_proba(X_test)
+        fpr, tpr, thresholds = roc_curve(y_test, predict_prob_test[:, 1], pos_label = 2) #On considère positif qd patient endormi
+        tprs.append(interp(mean_fpr, fpr, tpr))
+        tprs[-1][0] = 0.0
+        roc_auc = auc(fpr, tpr)
+        aucs.append(roc_auc)
+        plt.plot(fpr, tpr, lw=1, alpha=0.3, label='ROC fold %d (AUC = %0.2f)' % (n, roc_auc))
+        print(n)
+    #Plot remaining stuff
+    plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r', label='Luck', alpha=.8)
+    
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_tpr[-1] = 1.0
+    mean_auc = auc(mean_fpr, mean_tpr)
+    std_auc = np.std(aucs)
+    plt.plot(mean_fpr, mean_tpr, color='b',
+             label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+             lw=2, alpha=.8)
+    model_aucs.append(mean_auc)
+    model_stds.append(std_auc)
+    std_tpr = np.std(tprs, axis=0)
+    tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+    tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+    #plot std in grey :
+    plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                     label=r'$\pm$ 1 std. dev.')
+    
+    plt.xlim([-0.05, 1.05])
+    plt.ylim([-0.05, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(name)
+    plt.legend(loc="lower right")
+    plt.show()
+
+figure()
+#plt.bar(np.arange(1,k+1,1),aucs_k,0.1)
+plt.errorbar(np.arange(1,6,1), model_aucs, (np.array(model_stds)/2).tolist(), linestyle = 'None', marker = 'o', capsize = 3, ecolor='r')
+plt.xticks(np.arange(1,6,1), names, rotation='vertical')
+plt.ylim([0.75,0.9])
+plt.grid(axis = 'x')#
+plt.xlabel('')
+plt.ylabel('Mean AUC for 50 tries')
+plt.title('Determination of best model',fontsize = 14)
+plt.ylim([0.75,0.95])
+#%% ROC curve with best k and best channel
+figure()
+tprs = [] #true positive rates
+aucs = [] #areas under curves
+mean_fpr = np.linspace(0, 1, 100)
+
+k = 6
+ch = 30
+knn = KNeighborsClassifier(k)
+
+for n in range(16): #On fait 10 essais puis on moyenne les résultats des essais
+    sample = random.sample(range(8),8)  #Sample de patients
+    #Séparation des patients en train et test:
+    X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
+    y_train_patient, y_test_patient = [],[]
+   
+    for i in range(6) : #On ajoute à la suite les features de chaque channel de chaque patient de la train list
+        X_train_patient = np.vstack((X_train_patient, X_patient[sample[i]][ch]))
+        y_train_patient = np.concatenate((y_train_patient, y_patient[sample[i]][ch]))
+    for i in range(2) :
+        X_test_patient = X_patient[sample[i+6]][ch]
+        y_test_patient = y_patient[sample[i+6]][ch]
+
+    ind = np.random.choice(10,10)
+    X_train , y_train = X_train_patient, y_train_patient
+    X_test  , y_test  = X_test_patient , y_test_patient
+    
+    if X_train.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
+    
+    #Entrainement pour une répartition aléatoire train/test sur les n :
+    knn.fit(X_train, y_train)
+    predict_prob_test = knn.predict_proba(X_test)
+    fpr, tpr, thresholds = roc_curve(y_test, predict_prob_test[:, 1], pos_label = 2) #On considère positif qd patient endormi
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    tprs[-1][0] = 0.0
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    plt.plot(fpr, tpr, lw=1, alpha=0.3, label='Try n°%d : AUC = %0.2f' % (n, roc_auc))
+    print(n)
+#Plot remaining stuff
+plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r', label='Luck', alpha=.8)
+
+mean_tpr = np.mean(tprs, axis=0)
+mean_tpr[-1] = 1.0
+mean_auc = auc(mean_fpr, mean_tpr)
+std_auc = np.std(aucs)
+plt.plot(mean_fpr, mean_tpr, color='b',
+         label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+         lw=2, alpha=.8)
+
+std_tpr = np.std(tprs, axis=0)
+tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+#plot std in grey :
+plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                 label=r'$\pm$ 1 std. dev.')
+
+plt.xlim([-0.05, 1.05])
+plt.ylim([-0.05, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC - Nearest Neighbors')
+plt.legend(loc="lower right")
+plt.show()
+#%% Confusion Matrix
+figure()
+tprs = [] #true positive rates
+aucs = [] #areas under curves
+mean_fpr = np.linspace(0, 1, 100)
+
+k = 6
+ch = 30
+knn = KNeighborsClassifier(k)
+
+#for n in range(16): #On fait 10 essais puis on moyenne les résultats des essais
+sample = random.sample(range(8),8)  #Sample de patients
+#Séparation des patients en train et test:
+X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
+y_train_patient, y_test_patient = [],[]
+   
+for i in range(6) : #On ajoute à la suite les features de chaque channel de chaque patient de la train list
+    X_train_patient = np.vstack((X_train_patient, X_patient[sample[i]][ch]))
+    y_train_patient = np.concatenate((y_train_patient, y_patient[sample[i]][ch]))
+for i in range(2) :
+    X_test_patient = X_patient[sample[i+6]][ch]
+    y_test_patient = y_patient[sample[i+6]][ch]
+
+ind = np.random.choice(10,10)
+X_train , y_train = X_train_patient, y_train_patient
+X_test  , y_test  = X_test_patient , y_test_patient
+
+#if X_train.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
+
+#Entrainement pour une répartition aléatoire train/test sur les n :
+knn.fit(X_train, y_train)
+predict_prob_test = knn.predict_proba(X_test)
+predict_test = knn.predict(X_test)
+tn, fp, fn, tp = sklearn.metrics.confusion_matrix(y_test, predict_test).ravel()
+accuracy = accuracy_score(y_test, predict_test)
+precision = precision_score(y_test, predict_test)
+sensitivity = tp/(tp+fn)
+specificity = tn/(tn+fp)
+
 #%% 3D plots
 X_backup = X_all_patients.copy()
 y_backup = y_all_patients.copy()
