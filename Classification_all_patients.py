@@ -524,44 +524,67 @@ plt.title('ROC - Nearest Neighbors')
 plt.legend(loc="lower right")
 plt.show()
 #%% Confusion Matrix
-figure()
 tprs = [] #true positive rates
 aucs = [] #areas under curves
-mean_fpr = np.linspace(0, 1, 100)
 
 k = 6
 ch = 30
 knn = KNeighborsClassifier(k)
+tnrs, fprs, fnrs, tprs = [],[],[],[]
+mean_accuracy = []
+mean_precision = []
+mean_sensitivity = []
+mean_specificity = []
 
-#for n in range(16): #On fait 10 essais puis on moyenne les résultats des essais
-sample = random.sample(range(8),8)  #Sample de patients
-#Séparation des patients en train et test:
-X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
-y_train_patient, y_test_patient = [],[]
-   
-for i in range(6) : #On ajoute à la suite les features de chaque channel de chaque patient de la train list
-    X_train_patient = np.vstack((X_train_patient, X_patient[sample[i]][ch]))
-    y_train_patient = np.concatenate((y_train_patient, y_patient[sample[i]][ch]))
-for i in range(2) :
-    X_test_patient = X_patient[sample[i+6]][ch]
-    y_test_patient = y_patient[sample[i+6]][ch]
-
-ind = np.random.choice(10,10)
-X_train , y_train = X_train_patient, y_train_patient
-X_test  , y_test  = X_test_patient , y_test_patient
-
-#if X_train.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
-
-#Entrainement pour une répartition aléatoire train/test sur les n :
-knn.fit(X_train, y_train)
-predict_prob_test = knn.predict_proba(X_test)
-predict_test = knn.predict(X_test)
-tn, fp, fn, tp = sklearn.metrics.confusion_matrix(y_test, predict_test).ravel()
-accuracy = accuracy_score(y_test, predict_test)
-precision = precision_score(y_test, predict_test)
-sensitivity = tp/(tp+fn)
-specificity = tn/(tn+fp)
-
+for n in range(16): #On fait 10 essais puis on moyenne les résultats des essais
+    sample = random.sample(range(8),8)  #Sample de patients
+    #Séparation des patients en train et test:
+    X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
+    y_train_patient, y_test_patient = [],[]
+       
+    for i in range(6) : #On ajoute à la suite les features de chaque channel de chaque patient de la train list
+        X_train_patient = np.vstack((X_train_patient, X_patient[sample[i]][ch]))
+        y_train_patient = np.concatenate((y_train_patient, y_patient[sample[i]][ch]))
+    for i in range(2) :
+        X_test_patient = X_patient[sample[i+6]][ch]
+        y_test_patient = y_patient[sample[i+6]][ch]
+    
+    ind = np.random.choice(10,10)
+    X_train , y_train = X_train_patient, y_train_patient
+    X_test  , y_test  = X_test_patient , y_test_patient
+    
+    #if X_train.shape[0] * X_test.shape[0] == 0 : continue ##Si l'un des trois est vide à cause de channels exclus
+    
+    #Entrainement pour une répartition aléatoire train/test sur les n :
+    knn.fit(X_train, y_train)
+    predict_prob_test = knn.predict_proba(X_test)
+    predict_test = knn.predict(X_test)
+    
+    tn, fp, fn, tp = sklearn.metrics.confusion_matrix(y_test, predict_test).ravel()
+    
+    accuracy = accuracy_score(y_test, predict_test)
+    precision = precision_score(y_test, predict_test)
+    sensitivity = tp/(tp+fn)
+    specificity = tn/(tn+fp)
+    
+    tnr = specificity
+    fpr = 1 - specificity
+    fnr = 1 - tpr
+    tpr = sensitivity
+    
+    
+    mean_accuracy.append(accuracy)
+    mean_precision.append(precision)
+    mean_sensitivity.append(sensitivity)
+    mean_specificity.append(specificity)
+    tnrs.append(tnr)
+    fprs.append(fpr)
+    fnrs.append(fnr)
+    tprs.append(tpr)
+mean_tnr = np.mean(tnrs)
+mean_fpr = np.mean(fprs)
+mean_fnr = np.mean(fnrs)
+mean_tpr = np.mean(tprs)
 #%% 3D plots
 X_backup = X_all_patients.copy()
 y_backup = y_all_patients.copy()
