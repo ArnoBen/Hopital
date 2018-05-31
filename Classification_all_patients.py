@@ -531,12 +531,12 @@ k = 6
 ch = 30
 knn = KNeighborsClassifier(k)
 tnrs, fprs, fnrs, tprs = [],[],[],[]
-mean_accuracy = []
-mean_precision = []
-mean_sensitivity = []
-mean_specificity = []
+accuracies = []
+precisions = []
+specificities = []
+sensitivities = []
 
-for n in range(16): #On fait 10 essais puis on moyenne les résultats des essais
+for n in range(51): #On fait 10 essais puis on moyenne les résultats des essais
     sample = random.sample(range(8),8)  #Sample de patients
     #Séparation des patients en train et test:
     X_train_patient, X_test_patient = empty_array.copy(), empty_array.copy()
@@ -573,18 +573,22 @@ for n in range(16): #On fait 10 essais puis on moyenne les résultats des essais
     tpr = sensitivity
     
     
-    mean_accuracy.append(accuracy)
-    mean_precision.append(precision)
-    mean_sensitivity.append(sensitivity)
-    mean_specificity.append(specificity)
+    accuracies.append(accuracy)
+    precisions.append(precision)
+    sensitivities.append(sensitivity)
+    specificities.append(specificity)
     tnrs.append(tnr)
     fprs.append(fpr)
     fnrs.append(fnr)
     tprs.append(tpr)
-mean_tnr = np.mean(tnrs)
-mean_fpr = np.mean(fprs)
-mean_fnr = np.mean(fnrs)
-mean_tpr = np.mean(tprs)
+mean_tnr, std_tnr, min_tnr, max_tnr = np.mean(tnrs), np.std(tnrs), np.min(tnrs), np.max(tnrs)
+mean_fpr, std_fpr, min_fpr, max_fpr  = np.mean(fprs), np.std(fprs), np.min(fprs), np.max(fprs)
+mean_fnr, std_fnr, min_fnr, max_fnr  = np.mean(fnrs), np.std(fnrs), np.min(fnrs), np.max(fnrs)
+mean_tpr, std_tpr, min_tpr, max_tpr  = np.mean(tprs), np.std(tprs), np.min(tprs), np.max(tprs)
+mean_accuracy, std_accuracy = np.mean(accuracies), np.std(accuracy)
+mean_precision,std_precision = np.mean(precisions), np.std(precision)
+mean_sensitivity, std_sensitivity = np.mean(sensitivities), np.std(sensitivities)
+mean_specificity, std_specificity = np.mean(specificities), np.std(specificities)
 #%% 3D plots
 X_backup = X_all_patients.copy()
 y_backup = y_all_patients.copy()
